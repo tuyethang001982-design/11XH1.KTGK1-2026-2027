@@ -93,24 +93,16 @@
         .glow-effect-navy {
             animation: pulse-glow-navy 3s infinite;
         }
-        /* Bảo vệ nội dung chữ chống OCR / chụp màn hình AI */
-        .anti-ocr-text {
+        /* Chống bôi đen sao chép tuyệt đối */
+        .no-select {
             user-select: none !important;
             -webkit-user-select: none !important;
             -moz-user-select: none !important;
             -ms-user-select: none !important;
         }
-        /* Style cho khung Canvas vẽ câu hỏi chống AI đọc chữ */
-        canvas.question-canvas {
-            width: 100%;
-            height: auto;
-            border-radius: 1rem;
-            display: block;
-            pointer-events: none;
-        }
     </style>
 </head>
-<body class="text-slate-100 min-h-screen flex flex-col antialiased selection:bg-indigo-500 selection:text-white" oncontextmenu="return false;">
+<body class="text-slate-100 min-h-screen flex flex-col antialiased selection:bg-indigo-500 selection:text-white no-select" oncontextmenu="return false;" oncopy="return false;" oncut="return false;">
 
     <!-- Split Screen / Cheat Warning Overlay -->
     <div id="split-screen-overlay" class="fixed inset-0 bg-rose-950/95 backdrop-blur-2xl hidden z-50 flex flex-col items-center justify-center p-6 text-center space-y-6">
@@ -923,7 +915,6 @@
                     badge = `<span class="px-3 py-1 rounded-full bg-amber-950 text-amber-300 font-extrabold text-[11px] border border-amber-500/30">PHẦN III: TỰ LUẬN (${qIdx === 16 ? '1.0Đ' : '2.0Đ'})</span>`;
                 }
 
-                // Áp dụng kỹ thuật obfuscateText để chèn ký tự ẩn làm nhiễu AI OCR khi quét hình ảnh hoặc trích xuất DOM
                 const safeQuestionText = obfuscateText(q.question);
 
                 let content = `
@@ -931,9 +922,8 @@
                     ${badge}
                     <span class="text-xs font-bold text-slate-400">Câu ${qIdx + 1} / ${activeQuizData.length}</span>
                 </div>
-                <!-- Dùng Canvas vẽ câu hỏi thay vì Text HTML để vô hiệu hóa hoàn toàn Gemini Extension -->
-                <div class="glass-card p-4 rounded-2xl border border-slate-700/80 mb-4 overflow-hidden">
-                    <canvas id="q-canvas-${qIdx}" class="question-canvas"></canvas>
+                <div class="glass-card p-4 rounded-2xl border border-slate-700/80 mb-4 font-semibold text-slate-100 text-sm sm:text-base leading-relaxed whitespace-pre-line no-select">
+                    ${safeQuestionText}
                 </div>
             `;
 
@@ -943,11 +933,11 @@
                     const letter = String.fromCharCode(65 + optIdx);
                     content += `
                         <div onclick="selectMcOption(${qIdx}, ${optIdx})" class="opt-card glass-card p-4 rounded-2xl border border-slate-700/80 cursor-pointer flex items-center gap-3 hover:border-indigo-500">
-                            <div class="opt-circle w-7 h-7 rounded-full border-2 border-slate-500 flex items-center justify-center text-xs font-bold shrink-0 transition-colors">
+                            <div class="opt-circle w-8 h-8 rounded-full border-2 border-slate-500 flex items-center justify-center text-xs font-black shrink-0 transition-colors">
                                 ${letter}
                             </div>
-                            <div class="flex-1 overflow-hidden">
-                                <canvas id="opt-canvas-${qIdx}-${optIdx}" class="question-canvas"></canvas>
+                            <div class="text-xs sm:text-sm text-slate-200 font-medium leading-normal no-select">
+                                ${obfuscateText(opt)}
                             </div>
                         </div>
                     `;
@@ -958,16 +948,16 @@
                 q.subQuestions.forEach((sub, subIdx) => {
                     content += `
                         <div class="glass-card p-4 rounded-2xl border border-slate-700/70 space-y-3">
-                            <div class="overflow-hidden">
-                                <canvas id="sub-canvas-${qIdx}-${subIdx}" class="question-canvas"></canvas>
+                            <div class="text-xs sm:text-sm text-slate-200 font-medium leading-relaxed no-select">
+                                ${obfuscateText(sub.label)}
                             </div>
                             <div class="flex items-center gap-2">
                                 <button type="button" onclick="selectTfOption(${qIdx}, ${subIdx}, true, this, this.nextElementSibling)" 
-                                    class="tf-btn tf-btn-true flex-1 py-2 rounded-xl bg-slate-900 border border-slate-700 text-slate-300 font-bold text-xs hover:border-emerald-500">
+                                    class="tf-btn tf-btn-true flex-1 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-slate-300 font-extrabold text-xs hover:border-emerald-500">
                                     ĐÚNG
                                 </button>
                                 <button type="button" onclick="selectTfOption(${qIdx}, ${subIdx}, false, this, this.previousElementSibling)" 
-                                    class="tf-btn tf-btn-false flex-1 py-2 rounded-xl bg-slate-900 border border-slate-700 text-slate-300 font-bold text-xs hover:border-rose-500">
+                                    class="tf-btn tf-btn-false flex-1 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-slate-300 font-extrabold text-xs hover:border-rose-500">
                                     SAI
                                 </button>
                             </div>
@@ -998,82 +988,12 @@
         });
     }
 
-    // Hàm vẽ chữ lên Canvas chuyên dụng chống AI đọc đề
-    function renderTextToCanvas(canvasId, text, fontSize = 15, fontColor = '#f8fafc', maxW = 800) {
-        const canvas = document.getElementById(canvasId);
-        if (!canvas) return;
-        const ctx = canvas.getContext('2d');
-
-        // Tính toán ngắt dòng chữ
-        const words = text.split(' ');
-        let lines = [];
-        let currentLine = words[0] || '';
-
-        ctx.font = `600 ${fontSize}px "Plus Jakarta Sans", sans-serif`;
-
-        for (let i = 1; i < words.length; i++) {
-            const word = words[i];
-            const width = ctx.measureText(currentLine + " " + word).width;
-            if (width < maxW) {
-                currentLine += " " + word;
-            } else {
-                lines.push(currentLine);
-                currentLine = word;
-            }
-        }
-        lines.push(currentLine);
-
-        const lineHeight = fontSize * 1.5;
-        const padding = 10;
-        canvas.width = maxW + padding * 2;
-        canvas.height = lines.length * lineHeight + padding * 2;
-
-        // Vẽ nền mờ & họa tiết chống AI OCR
-        ctx.fillStyle = '#0f172a';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-        // Đường vân bảo vệ ngầm
-        ctx.strokeStyle = 'rgba(99, 102, 241, 0.05)';
-        ctx.lineWidth = 1;
-        for (let i = 0; i < canvas.height; i += 8) {
-            ctx.beginPath();
-            ctx.moveTo(0, i);
-            ctx.lineTo(canvas.width, i);
-            ctx.stroke();
-        }
-
-        // Vẽ chữ thực tế
-        ctx.font = `600 ${fontSize}px "Plus Jakarta Sans", sans-serif`;
-        ctx.fillStyle = fontColor;
-        ctx.textBaseline = 'top';
-
-        lines.forEach((line, idx) => {
-            ctx.fillText(line, padding, padding + idx * lineHeight);
-        });
-    }
-
     function showQuestion(index) {
         if (index < 0 || index >= activeQuizData.length) return;
         document.getElementById(`question-card-${currentQuestionIndex}`).classList.add('hidden');
         currentQuestionIndex = index;
         const currentCard = document.getElementById(`question-card-${currentQuestionIndex}`);
         currentCard.classList.remove('hidden');
-
-        // Thực hiện render Canvas cho câu hỏi hiện tại
-        const qData = activeQuizData[currentQuestionIndex];
-        const containerW = currentCard.clientWidth ? Math.max(currentCard.clientWidth - 40, 300) : 750;
-
-        renderTextToCanvas(`q-canvas-${currentQuestionIndex}`, qData.question, 15, '#ffffff', containerW);
-
-        if (qData.type === 'mc') {
-            qData.options.forEach((opt, optIdx) => {
-                renderTextToCanvas(`opt-canvas-${currentQuestionIndex}-${optIdx}`, opt, 14, '#cbd5e1', containerW - 50);
-            });
-        } else if (qData.type === 'tf') {
-            qData.subQuestions.forEach((sub, subIdx) => {
-                renderTextToCanvas(`sub-canvas-${currentQuestionIndex}-${subIdx}`, sub.label, 13.5, '#e2e8f0', containerW - 30);
-            });
-        }
 
         document.getElementById('step-indicator').textContent = `Câu ${currentQuestionIndex + 1} / ${activeQuizData.length}`;
 
@@ -1102,40 +1022,7 @@
         showQuestion(currentQuestionIndex + 1);
     }
 
-        function showQuestion(index) {
-            if (index < 0 || index >= activeQuizData.length) return;
-            document.getElementById(`question-card-${currentQuestionIndex}`).classList.add('hidden');
-            currentQuestionIndex = index;
-            document.getElementById(`question-card-${currentQuestionIndex}`).classList.remove('hidden');
-
-            document.getElementById('step-indicator').textContent = `Câu ${currentQuestionIndex + 1} / ${activeQuizData.length}`;
-
-            document.getElementById('prev-btn').disabled = currentQuestionIndex === 0;
-            if (currentQuestionIndex === activeQuizData.length - 1) {
-                document.getElementById('next-btn').classList.add('hidden');
-            } else {
-                document.getElementById('next-btn').classList.remove('hidden');
-            }
-
-            const pBtns = document.querySelectorAll('#question-palette button');
-            pBtns.forEach((btn, i) => {
-                if (i === currentQuestionIndex) {
-                    btn.classList.add('ring-2', 'ring-cyan-400', 'border-cyan-400');
-                } else {
-                    btn.classList.remove('ring-2', 'ring-cyan-400', 'border-cyan-400');
-                }
-            });
-        }
-
-        function prevQuestion() {
-            showQuestion(currentQuestionIndex - 1);
-        }
-
-        function nextQuestion() {
-            showQuestion(currentQuestionIndex + 1);
-        }
-
-        function updateProgress() {
+    function updateProgress() {
             let answeredCount = 0;
             activeQuizData.forEach((q, qIdx) => {
                 let isAnswered = false;
